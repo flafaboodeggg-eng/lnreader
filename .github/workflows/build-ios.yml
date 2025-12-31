@@ -59,12 +59,16 @@ jobs:
           cd ios
           rm -rf Pods Podfile.lock
           
-          # 1. تثبيت نسخة lottie
-          # 2. إضافة post_install لرفع نسخة IPHONEOS_DEPLOYMENT_TARGET تلقائياً لكل الـ Pods إلى 13.4
+          # إزالة أي post_install قديم لتجنب التكرار (Conflict)
+          # وحقن الإعدادات الجديدة في نهاية الملف
+          sed -i '' '/post_install do |installer|/,/end/d' Podfile
+          
+          # إضافة مكتبة lottie في البداية
           sed -i '' "1i\\
           pod 'lottie-ios', '3.4.1'
           " Podfile
-          
+
+          # إضافة التعديلات المطلوبة للـ Deployment Target وتجاوز أخطاء الموديلات
           cat >> Podfile << EOF
 
           post_install do |installer|
@@ -72,9 +76,9 @@ jobs:
               target.build_configurations.each do |config|
                 config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '13.4'
                 config.build_settings['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'
-               config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] ||= ['\$(inherited)', 'PERMISSION_NOTIFICATIONS=1']
               end
             end
+            # إذا كان هناك إعدادات خاصة بـ Expo فسيتم دمجها هنا إذا احتجت مستقبلاً
           end
           EOF
           
@@ -84,7 +88,9 @@ jobs:
         run: |
           cd ios
           
-          # تنظيف وبناء مع تجاهل التوقيع وتحديد الوجهة
+          # تثبيت xcpretty لتنظيف المخرجات إذا لم تكن موجودة
+          sudo gem install xcpretty
+
           xcodebuild build \
             -workspace LNReader.xcworkspace \
             -scheme LNReader \
