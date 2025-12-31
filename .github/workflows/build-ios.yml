@@ -67,14 +67,10 @@ jobs:
           touch RCTNativeFile.swift
           echo "import Foundation" > RCTNativeFile.swift
 
-          # 3. تصحيح مسميات البروتوكول (Codegen Match)
-          if [ -f "NativeEpubUtil/RCTNativeEpubUtil.h" ]; then
-            sed -i '' 's/NativeEpubUtilSpec/NativeEpubSpec/g' NativeEpubUtil/RCTNativeEpubUtil.h
-          fi
-          if [ -f "NativeEpubUtil/RCTNativeEpubUtil.mm" ]; then
-            sed -i '' 's/NativeEpubUtilSpec/NativeEpubSpec/g' NativeEpubUtil/RCTNativeEpubUtil.mm
-            # 4. حل تعارض الـ Nullability (حذف _Nullable المسبب للخطأ)
-            sed -i '' 's/_Nullable//g' NativeEpubUtil/RCTNativeEpubUtil.mm
+          # 3. تصحيح مسميات البروتوكول وتعارضات Nullability
+          if [ -d "NativeEpubUtil" ]; then
+            find NativeEpubUtil -type f \( -name "*.h" -o -name "*.mm" \) -exec sed -i '' 's/NativeEpubUtilSpec/NativeEpubSpec/g' {} +
+            find NativeEpubUtil -type f -name "*.mm" -exec sed -i '' 's/_Nullable//g' {} +
           fi
 
           pod install --repo-update
@@ -82,26 +78,37 @@ jobs:
       - name: Build and Package IPA
         run: |
           cd ios
+          # تحديد مجلد المخرجات بشكل صريح
+          mkdir -p build_output
+          
           xcodebuild \
             -workspace LNReader.xcworkspace \
             -scheme LNReader \
             -configuration Release \
             -sdk iphoneos \
             -derivedDataPath build \
+            CONFIGURATION_BUILD_DIR=$(pwd)/build_output \
             ARCHS="arm64" \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
             AD_HOC_CODE_SIGNING_ALLOWED=YES \
             GCC_WARN_INHIBIT_ALL_WARNINGS=YES \
-            clean build | xcpretty -c && exit ${PIPESTATUS[0]}
+            clean build | xcpretty -c
           
-          if [ -d "build/Build/Products/Release-iphoneos/LNReader.app" ]; then
+          # البحث عن ملف الـ .app وضغطه داخل Payload
+          cd build_output
+          APP_PATH=$(find . -name "*.app" -maxdepth 1 -type d | head -n 1)
+          
+          if [ -n "$APP_PATH" ]; then
+            echo "Found app at: $APP_PATH"
             mkdir -p Payload
-            cp -r build/Build/Products/Release-iphoneos/LNReader.app Payload/
-            zip -r LNReader-unsigned.ipa Payload
+            cp -r "$APP_PATH" Payload/
+            zip -r ../LNReader-unsigned.ipa Payload
+            echo "IPA created successfully"
           else
-            echo "Error: LNReader.app not found. Build failed."
+            echo "Error: Could not find .app file in $(pwd)"
+            ls -R
             exit 1
           fi
 
