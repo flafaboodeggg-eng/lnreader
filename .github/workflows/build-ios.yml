@@ -59,8 +59,7 @@ jobs:
           cd ios
           rm -rf Pods Podfile.lock
           
-          # إزالة أي post_install قديم لتجنب التكرار (Conflict)
-          # وحقن الإعدادات الجديدة في نهاية الملف
+          # إزالة أي post_install قديم وحقن الإعدادات الجديدة
           sed -i '' '/post_install do |installer|/,/end/d' Podfile
           
           # إضافة مكتبة lottie في البداية
@@ -68,7 +67,6 @@ jobs:
           pod 'lottie-ios', '3.4.1'
           " Podfile
 
-          # إضافة التعديلات المطلوبة للـ Deployment Target وتجاوز أخطاء الموديلات
           cat >> Podfile << EOF
 
           post_install do |installer|
@@ -76,9 +74,10 @@ jobs:
               target.build_configurations.each do |config|
                 config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '13.4'
                 config.build_settings['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'
+                # حل مشكلة تحذيرات الـ Script Phases في Xcode الحديث
+                config.build_settings['ENABLE_USER_SCRIPT_SANDBOX'] = 'NO'
               end
             end
-            # إذا كان هناك إعدادات خاصة بـ Expo فسيتم دمجها هنا إذا احتجت مستقبلاً
           end
           EOF
           
@@ -88,9 +87,14 @@ jobs:
         run: |
           cd ios
           
-          # تثبيت xcpretty لتنظيف المخرجات إذا لم تكن موجودة
+          # حل مشكلة Hermes: منح صلاحيات التنفيذ لسكريبتات التبديل
+          chmod +x Pods/hermes-engine/destroot/bin/hermesc || true
+          find Pods/hermes-engine -name "*.sh" -exec chmod +x {} \; || true
+
+          # تثبيت xcpretty
           sudo gem install xcpretty
 
+          # البناء مع تعطيل الـ Sandboxing الخاص بالسكريبتات لتجنب فشل محرك Hermes
           xcodebuild build \
             -workspace LNReader.xcworkspace \
             -scheme LNReader \
@@ -102,11 +106,18 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
             AD_HOC_CODE_SIGNING_ALLOWED=YES \
+            ENABLE_USER_SCRIPT_SANDBOX=NO \
             COMPILER_INDEX_STORE_ENABLE=NO | xcpretty
 
-          mkdir -p Payload
-          cp -r build/Build/Products/Release-iphoneos/LNReader.app Payload/
-          zip -r LNReader-unsigned.ipa Payload
+          # التأكد من نجاح البناء قبل محاولة ضغط الملف
+          if [ -d "build/Build/Products/Release-iphoneos/LNReader.app" ]; then
+            mkdir -p Payload
+            cp -r build/Build/Products/Release-iphoneos/LNReader.app Payload/
+            zip -r LNReader-unsigned.ipa Payload
+          else
+            echo "Error: LNReader.app not found. Build failed."
+            exit 1
+          fi
 
       - name: Upload IPA Artifact
         uses: actions/upload-artifact@v4
