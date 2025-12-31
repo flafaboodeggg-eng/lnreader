@@ -54,12 +54,20 @@ jobs:
           BUILD_TYPE=Github Action
           EOF
 
-      - name: Install Pods
+      - name: Fix Dependencies and Install Pods
         run: |
           cd ios
-          # تحديث الـ Repo وحذف الـ lockfile الخاص بالـ Pods لضمان حل التعارض
+          # تنظيف الملفات القديمة
           rm -rf Pods Podfile.lock
-          pod install --repo-update || pod update lottie-ios
+          
+          # حقن كود في بداية Podfile لفرض إصدار lottie-ios بشكل نهائي قبل الـ Autolinking
+          # سنستخدم نسخة 3.4.1 لأنها الأكثر استقراراً مع lottie-react-native 5.1.x
+          sed -i '' "1i\\
+          pod 'lottie-ios', '3.4.1'
+          " Podfile
+
+          # تثبيت الـ Pods مع تحديث المستودعات
+          pod install --repo-update
 
       - name: Build and Package IPA
         run: |
