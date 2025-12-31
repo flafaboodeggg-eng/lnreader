@@ -54,28 +54,34 @@ jobs:
           BUILD_TYPE=Github Action
           EOF
 
-      - name: Fix Dependencies and Missing Files
+      - name: Fix Dependencies and Native Code
         run: |
           cd ios
-          # حل مشكلة lottie-ios
+          # 1. حل مشكلة lottie-ios
           rm -rf Pods Podfile.lock
           sed -i '' "1i\\
           pod 'lottie-ios', '3.4.1'
           " Podfile
           
-          # إنشاء الملف المفقود الذي يطلبه Xcode مع تأكيد امتداده
+          # 2. حل مشكلة الملف المفقود RCTNativeFile.swift
           touch RCTNativeFile.swift
           echo "import Foundation" > RCTNativeFile.swift
-          
-          # تنظيف أي ملفات تالفة في المجلدات التي سببت الفشل
-          # إذا كانت هذه الملفات لا تؤثر على الوظائف الأساسية، سنحاول الاستمرار
+
+          # 3. تصحيح الخطأ في ملف NativeEpubUtil (تغيير المسمى ليتوافق مع Codegen)
+          # سنقوم باستبدال NativeEpubUtilSpec بـ NativeEpubSpec كما اقترح Xcode
+          if [ -f "NativeEpubUtil/RCTNativeEpubUtil.h" ]; then
+            sed -i '' 's/NativeEpubUtilSpec/NativeEpubSpec/g' NativeEpubUtil/RCTNativeEpubUtil.h
+          fi
+          if [ -f "NativeEpubUtil/RCTNativeEpubUtil.mm" ]; then
+            sed -i '' 's/NativeEpubUtilSpec/NativeEpubSpec/g' NativeEpubUtil/RCTNativeEpubUtil.mm
+          fi
+
           pod install --repo-update
 
       - name: Build and Package IPA
         run: |
           cd ios
-          # إضافة -allowProvisioningUpdates وتحديد معمارية المعالج بدقة
-          # مع تجاهل الأخطاء غير الجوهرية (Warnings)
+          # بناء المشروع مع تجاهل التحذيرات والتركيز على arm64
           xcodebuild \
             -workspace LNReader.xcworkspace \
             -scheme LNReader \
@@ -83,7 +89,6 @@ jobs:
             -sdk iphoneos \
             -derivedDataPath build \
             ARCHS="arm64" \
-            ONLY_ACTIVE_ARCH=NO \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
