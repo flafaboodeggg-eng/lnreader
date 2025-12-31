@@ -67,13 +67,14 @@ jobs:
           touch RCTNativeFile.swift
           echo "import Foundation" > RCTNativeFile.swift
 
-          # 3. تصحيح الخطأ في ملف NativeEpubUtil (تغيير المسمى ليتوافق مع Codegen)
-          # سنقوم باستبدال NativeEpubUtilSpec بـ NativeEpubSpec كما اقترح Xcode
+          # 3. تصحيح مسميات البروتوكول (Codegen Match)
           if [ -f "NativeEpubUtil/RCTNativeEpubUtil.h" ]; then
             sed -i '' 's/NativeEpubUtilSpec/NativeEpubSpec/g' NativeEpubUtil/RCTNativeEpubUtil.h
           fi
           if [ -f "NativeEpubUtil/RCTNativeEpubUtil.mm" ]; then
             sed -i '' 's/NativeEpubUtilSpec/NativeEpubSpec/g' NativeEpubUtil/RCTNativeEpubUtil.mm
+            # 4. حل تعارض الـ Nullability (حذف _Nullable المسبب للخطأ)
+            sed -i '' 's/_Nullable//g' NativeEpubUtil/RCTNativeEpubUtil.mm
           fi
 
           pod install --repo-update
@@ -81,7 +82,6 @@ jobs:
       - name: Build and Package IPA
         run: |
           cd ios
-          # بناء المشروع مع تجاهل التحذيرات والتركيز على arm64
           xcodebuild \
             -workspace LNReader.xcworkspace \
             -scheme LNReader \
