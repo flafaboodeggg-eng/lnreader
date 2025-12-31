@@ -65,24 +65,30 @@ jobs:
           sed -i '' "1i\\
           pod 'lottie-ios', '3.4.1'
           " Podfile
-
+          
           # تثبيت الـ Pods مع تحديث المستودعات
           pod install --repo-update
 
       - name: Build and Package IPA
         run: |
           cd ios
+          
+          # تنظيف المشروع أولاً
+          xcodebuild clean -workspace LNReader.xcworkspace -scheme LNReader -configuration Release
+          
+          # عملية البناء مع تحديد الوجهة بدقة لتجنب Exit Code 65
           xcodebuild \
             -workspace LNReader.xcworkspace \
             -scheme LNReader \
             -configuration Release \
             -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
             -derivedDataPath build \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
-            clean build
-          
+            build
+
           mkdir -p Payload
           cp -r build/Build/Products/Release-iphoneos/LNReader.app Payload/
           zip -r LNReader-unsigned.ipa Payload
