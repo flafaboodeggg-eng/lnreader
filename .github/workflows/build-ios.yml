@@ -59,9 +59,10 @@ jobs:
           cd ios
           pod install --repo-update
 
-      - name: Build Unsigned .app
+      - name: Build and Package IPA
         run: |
           cd ios
+          # بناء التطبيق بصيغة .app
           xcodebuild \
             -workspace LNReader.xcworkspace \
             -scheme LNReader \
@@ -72,14 +73,10 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
             clean build
-
-      - name: Create Unsigned IPA
-        run: |
-          cd ios
+          
+          # إنشاء مجلد Payload ووضع التطبيق بداخله لتحويله لـ IPA
           mkdir -p Payload
-          # Move the compiled .app into the Payload folder
-          mv build/Build/Products/Release-iphoneos/LNReader.app Payload/
-          # Zip the Payload folder into an .ipa file
+          cp -r build/Build/Products/Release-iphoneos/LNReader.app Payload/
           zip -r LNReader-unsigned.ipa Payload
 
       - name: Upload IPA Artifact
