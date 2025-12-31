@@ -1,0 +1,90 @@
+name: Build iOS (Unsigned)
+on:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-ios:
+    name: Build Unsigned IPA
+    runs-on: macos-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Get pnpm Store Directory
+        shell: bash
+        run: |
+          echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+      - name: Setup pnpm Cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Install Dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Create Environment File
+        run: |
+          cat > .env << EOF
+          MYANIMELIST_CLIENT_ID=${{ vars.MYANIMELIST_CLIENT_ID }}
+          ANILIST_CLIENT_ID=${{ vars.ANILIST_CLIENT_ID }}
+          GIT_HASH=$(git rev-parse --short HEAD)
+          RELEASE_DATE=$(date -u +'%d/%m/%y %I:%M %p %Z')
+          BUILD_TYPE=Github Action
+          EOF
+
+      - name: Install Pods
+        run: |
+          cd ios
+          pod install --repo-update
+
+      - name: Build Unsigned .app
+        run: |
+          cd ios
+          xcodebuild \
+            -workspace LNReader.xcworkspace \
+            -scheme LNReader \
+            -configuration Release \
+            -sdk iphoneos \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            clean build
+
+      - name: Create Unsigned IPA
+        run: |
+          cd ios
+          mkdir -p Payload
+          # Move the compiled .app into the Payload folder
+          mv build/Build/Products/Release-iphoneos/LNReader.app Payload/
+          # Zip the Payload folder into an .ipa file
+          zip -r LNReader-unsigned.ipa Payload
+
+      - name: Upload IPA Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: LNReader-unsigned-ipa
+          path: ios/LNReader-unsigned.ipa
+          retention-days: 30
