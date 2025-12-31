@@ -59,57 +59,32 @@ jobs:
           cd ios
           rm -rf Pods Podfile.lock
           
-          # إزالة أي post_install قديم وحقن الإعدادات الجديدة
-          sed -i '' '/post_install do |installer|/,/end/d' Podfile
-          
-          # إضافة مكتبة lottie في البداية
+          # فرض إصدار lottie-ios المتوافق في بداية الملف
           sed -i '' "1i\\
           pod 'lottie-ios', '3.4.1'
           " Podfile
 
-          cat >> Podfile << EOF
-
-          post_install do |installer|
-            installer.pods_project.targets.each do |target|
-              target.build_configurations.each do |config|
-                config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '13.4'
-                config.build_settings['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'
-                # حل مشكلة تحذيرات الـ Script Phases في Xcode الحديث
-                config.build_settings['ENABLE_USER_SCRIPT_SANDBOX'] = 'NO'
-              end
-            end
-          end
-          EOF
-          
           pod install --repo-update
 
       - name: Build and Package IPA
         run: |
           cd ios
-          
-          # حل مشكلة Hermes: منح صلاحيات التنفيذ لسكريبتات التبديل
-          chmod +x Pods/hermes-engine/destroot/bin/hermesc || true
-          find Pods/hermes-engine -name "*.sh" -exec chmod +x {} \; || true
-
-          # تثبيت xcpretty
-          sudo gem install xcpretty
-
-          # البناء مع تعطيل الـ Sandboxing الخاص بالسكريبتات لتجنب فشل محرك Hermes
-          xcodebuild build \
+          # استخدام xcodebuild مع خيار -quiet لإخفاء الضجيج وإظهار الأخطاء فقط في النهاية
+          # وإضافة VALID_ARCHS لضمان التوافق
+          xcodebuild \
             -workspace LNReader.xcworkspace \
             -scheme LNReader \
             -configuration Release \
             -sdk iphoneos \
-            -destination 'generic/platform=iOS' \
             -derivedDataPath build \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
             AD_HOC_CODE_SIGNING_ALLOWED=YES \
-            ENABLE_USER_SCRIPT_SANDBOX=NO \
-            COMPILER_INDEX_STORE_ENABLE=NO | xcpretty
-
-          # التأكد من نجاح البناء قبل محاولة ضغط الملف
+            COMPILER_INDEX_STORE_ENABLE=NO \
+            clean build | xcpretty -c && exit ${PIPESTATUS[0]}
+          
+          # التحقق من وجود ملف التطبيق قبل المحاولة
           if [ -d "build/Build/Products/Release-iphoneos/LNReader.app" ]; then
             mkdir -p Payload
             cp -r build/Build/Products/Release-iphoneos/LNReader.app Payload/
