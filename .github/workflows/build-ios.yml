@@ -57,12 +57,13 @@ jobs:
       - name: Install Pods
         run: |
           cd ios
-          pod install --repo-update
+          # تحديث الـ Repo وحذف الـ lockfile الخاص بالـ Pods لضمان حل التعارض
+          rm -rf Pods Podfile.lock
+          pod install --repo-update || pod update lottie-ios
 
       - name: Build and Package IPA
         run: |
           cd ios
-          # بناء التطبيق بصيغة .app
           xcodebuild \
             -workspace LNReader.xcworkspace \
             -scheme LNReader \
@@ -74,7 +75,6 @@ jobs:
             CODE_SIGN_IDENTITY="" \
             clean build
           
-          # إنشاء مجلد Payload ووضع التطبيق بداخله لتحويله لـ IPA
           mkdir -p Payload
           cp -r build/Build/Products/Release-iphoneos/LNReader.app Payload/
           zip -r LNReader-unsigned.ipa Payload
