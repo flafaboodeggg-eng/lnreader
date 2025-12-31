@@ -57,27 +57,35 @@ jobs:
       - name: Fix Dependencies and Install Pods
         run: |
           cd ios
-          # تنظيف الملفات القديمة
           rm -rf Pods Podfile.lock
           
-          # حقن كود في بداية Podfile لفرض إصدار lottie-ios بشكل نهائي قبل الـ Autolinking
-          # سنستخدم نسخة 3.4.1 لأنها الأكثر استقراراً مع lottie-react-native 5.1.x
+          # 1. تثبيت نسخة lottie
+          # 2. إضافة post_install لرفع نسخة IPHONEOS_DEPLOYMENT_TARGET تلقائياً لكل الـ Pods إلى 13.4
           sed -i '' "1i\\
           pod 'lottie-ios', '3.4.1'
           " Podfile
           
-          # تثبيت الـ Pods مع تحديث المستودعات
+          cat >> Podfile << EOF
+
+          post_install do |installer|
+            installer.pods_project.targets.each do |target|
+              target.build_configurations.each do |config|
+                config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '13.4'
+                config.build_settings['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'
+               config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] ||= ['\$(inherited)', 'PERMISSION_NOTIFICATIONS=1']
+              end
+            end
+          end
+          EOF
+          
           pod install --repo-update
 
       - name: Build and Package IPA
         run: |
           cd ios
           
-          # تنظيف المشروع أولاً
-          xcodebuild clean -workspace LNReader.xcworkspace -scheme LNReader -configuration Release
-          
-          # عملية البناء مع تحديد الوجهة بدقة لتجنب Exit Code 65
-          xcodebuild \
+          # تنظيف وبناء مع تجاهل التوقيع وتحديد الوجهة
+          xcodebuild build \
             -workspace LNReader.xcworkspace \
             -scheme LNReader \
             -configuration Release \
@@ -87,7 +95,8 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
-            build
+            AD_HOC_CODE_SIGNING_ALLOWED=YES \
+            COMPILER_INDEX_STORE_ENABLE=NO | xcpretty
 
           mkdir -p Payload
           cp -r build/Build/Products/Release-iphoneos/LNReader.app Payload/
